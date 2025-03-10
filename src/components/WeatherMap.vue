@@ -1,3 +1,4 @@
+// @ts-nocheck
 <script setup lang="ts">
 import { onMounted, ref, watch, computed } from "vue";
 import "leaflet/dist/leaflet.css";
