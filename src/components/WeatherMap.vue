@@ -167,6 +167,7 @@ async function fetchWeatherData(
                         selectedMonth.value
                     ).padStart(2, "0")}-28`,
                     daily: "temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,precipitation_sum,cloud_cover_mean",
+                    hourly: "temperature_2m",
                     timezone: "Europe/Madrid",
                 },
             }
@@ -174,15 +175,34 @@ async function fetchWeatherData(
 
         const maxTemps = response.data.daily.temperature_2m_max;
         const minTemps = response.data.daily.temperature_2m_min;
-        const maxNightTemps = response.data.daily.apparent_temperature_max;
-        const minNightTemps = response.data.daily.apparent_temperature_min;
+        const maxApparentTemps = response.data.daily.apparent_temperature_max;
+        const minApparentTemps = response.data.daily.apparent_temperature_min;
         const precipitation = response.data.daily.precipitation_sum;
         const cloudCover = response.data.daily.cloud_cover_mean;
 
+        // Process hourly data to extract night temperatures (22:00-05:00)
+        const hourlyTimes = response.data.hourly.time;
+        const hourlyTemps = response.data.hourly.temperature_2m;
+        
+        // Array to store night temperatures
+        const nightTemps: number[] = [];
+        
+        // Filter for night hours (22:00-05:00)
+        hourlyTimes.forEach((timeString: string, index: number) => {
+            const hour = parseInt(timeString.split('T')[1].split(':')[0]);
+            if (hour >= 22 || hour <= 5) {
+                nightTemps.push(hourlyTemps[index]);
+            }
+        });
+        
+        // Calculate night temperature statistics
+        const maxNightTemp = nightTemps.length > 0 ? Math.max(...nightTemps) : null;
+        const minNightTemp = nightTemps.length > 0 ? Math.min(...nightTemps) : null;
+
         const maxTemp = Math.max(...maxTemps);
         const minTemp = Math.min(...minTemps);
-        const maxNightTemp = Math.max(...maxNightTemps);
-        const minNightTemp = Math.min(...minNightTemps);
+        const maxApparentTemp = Math.max(...maxApparentTemps);
+        const minApparentTemp = Math.min(...minApparentTemps);
 
         const daysOver30 = maxTemps.filter((temp: number) => temp >= 30).length;
         const daysOver35 = maxTemps.filter((temp: number) => temp >= 35).length;
@@ -195,15 +215,24 @@ async function fetchWeatherData(
             (cover: number) => cover > 70
         ).length;
 
-        return `
+        // Build the HTML for the popup
+        let temperaturesHtml = `
       <strong>Temperature Data for ${months[selectedMonth.value - 1]}:</strong>
       <ul>
         <li><strong>Maximum Temperature:</strong> ${maxTemp.toFixed(1)}°C</li>
-        <li><strong>Minimum Temperature:</strong> ${minTemp.toFixed(1)}°C</li>
-        <li><strong>Night Temperatures:</strong><br />
-            Min: ${minNightTemp.toFixed(1)}°C / Max: ${maxNightTemp.toFixed(
-            1
-        )}°C</li>
+        <li><strong>Minimum Temperature:</strong> ${minTemp.toFixed(1)}°C</li>`;
+        
+        // Add night temperature section if data is available
+        if (maxNightTemp !== null && minNightTemp !== null) {
+            temperaturesHtml += `
+        <li><strong>Night Temperatures (22:00-05:00):</strong><br />
+            Min: ${minNightTemp.toFixed(1)}°C / Max: ${maxNightTemp.toFixed(1)}°C</li>`;
+        }
+        
+        // Add apparent temperature section
+        temperaturesHtml += `
+        <li><strong>Apparent ("Feels Like") Temperatures:</strong><br />
+            Min: ${minApparentTemp.toFixed(1)}°C / Max: ${maxApparentTemp.toFixed(1)}°C</li>
         <li>Days over 30°C: ${daysOver30}</li>
         <li>Days over 35°C: ${daysOver35}</li>
         <li>Days over 40°C: ${daysOver40}</li>
@@ -214,6 +243,8 @@ async function fetchWeatherData(
         <li>Cloudy Days (>70%): ${cloudyDays}</li>
       </ul>
     `;
+        
+        return temperaturesHtml;
     } catch (e) {
         console.error("Error fetching weather data:", e);
         return "Error fetching weather data";
