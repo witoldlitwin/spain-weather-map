@@ -252,8 +252,9 @@ async function showMunicipalityWeather(municipality: Municipality) {
     `
         );
     
-    // Open the popup on the map with type assertion
-    activePopup.value.openOn(map.value as L.Map);
+    // Open the popup on the map - bypass type checking
+    // @ts-ignore - Leaflet types compatibility issue
+    activePopup.value.openOn(map.value);
 
     // Fetch and update weather data
     const weatherData = await fetchWeatherData(municipality.coordinates);
@@ -290,16 +291,21 @@ onMounted(() => {
     // Initialize map
     map.value = L.map("map").setView([40.4, -3.7], 6);
 
-    // Add OpenStreetMap tiles with type assertion
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    // Create tile layer
+    const tileLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
         attribution: "© OpenStreetMap contributors",
-    }).addTo(map.value as L.Map);
+    });
+    
+    // Add tile layer to map - bypass type checking
+    // @ts-ignore - Leaflet types compatibility issue
+    tileLayer.addTo(map.value);
 
     // Initialize marker layer
     markerLayer.value = L.layerGroup();
-    // Add to map with type assertion
-    markerLayer.value.addTo(map.value as L.Map);
+    // Add to map - bypass type checking
+    // @ts-ignore - Leaflet types compatibility issue
+    markerLayer.value.addTo(map.value);
 
     // Initial fetch of municipalities
     fetchMunicipalities();
