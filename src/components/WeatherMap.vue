@@ -15,8 +15,8 @@ const currentDate = new Date();
 const currentYear = currentDate.getFullYear();
 const currentMonth = currentDate.getMonth() + 1; // 1-indexed month
 
-const selectedMonth = ref(Math.min(currentMonth - 1, 12) || 12); // Default to previous month or December
-const selectedYear = ref(currentMonth === 1 ? currentYear - 1 : currentYear); // If current month is January, default to previous year
+const selectedMonth = ref(Math.min(currentMonth - 1, 12) || 12); // Default to previous month (or December)
+const selectedYear = ref(currentMonth === 1 ? currentYear - 1 : currentYear);
 const loading = ref(false);
 const error = ref("");
 const municipalities = ref<Municipality[]>([]);
@@ -50,7 +50,6 @@ const availableMonths = computed(() => {
             value: index + 1,
         }));
     } else {
-        // For past years, show all months
         return months.map((name, index) => ({
             name,
             value: index + 1,
@@ -60,12 +59,8 @@ const availableMonths = computed(() => {
 
 // Watch for year changes to adjust month if needed
 watch(selectedYear, (newYear) => {
-    if (newYear === currentYear) {
-        // If new year is current year and selected month is not available,
-        // set to the last available month
-        if (selectedMonth.value >= currentMonth) {
-            selectedMonth.value = currentMonth - 1;
-        }
+    if (newYear === currentYear && selectedMonth.value >= currentMonth) {
+        selectedMonth.value = currentMonth - 1;
     }
 });
 
@@ -77,7 +72,6 @@ async function fetchMunicipalities() {
         error.value = "";
 
         const bounds = map.value.getBounds();
-        // Format the polygon coordinates according to the API documentation
         const polygonCoords = `(${bounds.getNorthWest().lat}, ${
             bounds.getNorthWest().lng
         }), (${bounds.getNorthEast().lat}, ${bounds.getNorthEast().lng}), (${
@@ -88,7 +82,6 @@ async function fetchMunicipalities() {
 
         let response;
         try {
-            // Try with polygon filter first
             response = await axios.get(
                 "https://public.opendatasoft.com/api/records/1.0/search/",
                 {
@@ -101,10 +94,9 @@ async function fetchMunicipalities() {
             );
         } catch (polygonError) {
             console.error(
-                "Polygon filter failed, trying with bounding box:",
+                "Polygon filter failed, trying bounding box:",
                 polygonError
             );
-            // Fallback to a simpler query without geo filtering
             response = await axios.get(
                 "https://public.opendatasoft.com/api/records/1.0/search/",
                 {
@@ -121,12 +113,9 @@ async function fetchMunicipalities() {
             markerLayer.value.clearLayers();
         }
 
-        // Process the data from the OpenDataSoft API format
         municipalities.value = response.data.records.map((record: any) => {
-            // Check if geo_point_2d exists and has the expected format
             let coordinates: [number, number] = [0, 0];
             if (record.fields && record.fields.geo_point_2d) {
-                // The geo_point_2d field might be an array [lat, lon] or an object with lat/lon properties
                 if (Array.isArray(record.fields.geo_point_2d)) {
                     coordinates = [
                         record.fields.geo_point_2d[0],
@@ -190,18 +179,15 @@ async function fetchWeatherData(
         const precipitation = response.data.daily.precipitation_sum;
         const cloudCover = response.data.daily.cloud_cover_mean;
 
-        // Calculate temperature statistics
         const maxTemp = Math.max(...maxTemps);
         const minTemp = Math.min(...minTemps);
         const maxNightTemp = Math.max(...maxNightTemps);
         const minNightTemp = Math.min(...minNightTemps);
 
-        // Count days over specific temperature thresholds
         const daysOver30 = maxTemps.filter((temp: number) => temp >= 30).length;
         const daysOver35 = maxTemps.filter((temp: number) => temp >= 35).length;
         const daysOver40 = maxTemps.filter((temp: number) => temp >= 40).length;
 
-        // Count rainy and cloudy days
         const rainyDays = precipitation.filter(
             (rain: number) => rain > 0.1
         ).length;
@@ -237,13 +223,13 @@ async function fetchWeatherData(
 async function showMunicipalityWeather(municipality: Municipality) {
     if (!map.value) return;
 
-    // Close any existing popup by calling closePopup() with no parameters
+    // Close any existing popup without passing it as an argument
     if (activePopup.value && map.value) {
-        map.value.closePopup();
+        (map.value as L.Map).closePopup();
         activePopup.value = null;
     }
 
-    // Create a new popup using Leaflet's factory method
+    // Create and open a new popup
     activePopup.value = L.popup().setLatLng(municipality.coordinates)
         .setContent(`
       <div>
@@ -251,12 +237,10 @@ async function showMunicipalityWeather(municipality: Municipality) {
         <p>Loading weather data...</p>
       </div>
     `) as L.Popup;
-
     activePopup.value.openOn(map.value as L.Map);
 
     // Fetch and update weather data
     const weatherData = await fetchWeatherData(municipality.coordinates);
-
     if (activePopup.value) {
         activePopup.value.setContent(`
       <div>
@@ -270,7 +254,7 @@ async function showMunicipalityWeather(municipality: Municipality) {
     }
 }
 
-// Watch for date changes and update active popup
+// Update popup content if month or year changes
 watch([selectedMonth, selectedYear], async () => {
     if (activePopup.value && map.value) {
         const popupLatLng = activePopup.value.getLatLng();
@@ -301,14 +285,13 @@ onMounted(() => {
     );
     tileLayer.addTo(map.value as L.Map);
 
-    // Initialize marker layer and add it to the map
+    // Initialize and add marker layer
     markerLayer.value = L.layerGroup();
     (markerLayer.value as L.LayerGroup).addTo(map.value as L.Map);
 
     // Initial fetch of municipalities
     fetchMunicipalities();
-
-    // Update municipalities when map moves
+    // Refresh municipalities when map moves
     map.value.on("moveend", fetchMunicipalities);
 });
 </script>
@@ -328,7 +311,6 @@ onMounted(() => {
                     </option>
                 </select>
             </div>
-
             <div class="select-container">
                 <label for="year">Year:</label>
                 <select v-model="selectedYear" id="year">
@@ -359,8 +341,8 @@ onMounted(() => {
     background: white;
     display: flex;
     gap: 1rem;
-    z-index: 1000;
     border-bottom: 1px solid #eee;
+    z-index: 1000;
 }
 
 .select-container {
