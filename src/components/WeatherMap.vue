@@ -1,4 +1,3 @@
-// @ts-nocheck
 <script setup lang="ts">
 import { onMounted, ref, watch, computed } from "vue";
 import "leaflet/dist/leaflet.css";
@@ -105,7 +104,6 @@ async function fetchMunicipalities() {
                 "Polygon filter failed, trying with bounding box:",
                 polygonError
             );
-
             // Fallback to a simpler query without geo filtering
             response = await axios.get(
                 "https://public.opendatasoft.com/api/records/1.0/search/",
@@ -127,7 +125,6 @@ async function fetchMunicipalities() {
         municipalities.value = response.data.records.map((record: any) => {
             // Check if geo_point_2d exists and has the expected format
             let coordinates: [number, number] = [0, 0];
-
             if (record.fields && record.fields.geo_point_2d) {
                 // The geo_point_2d field might be an array [lat, lon] or an object with lat/lon properties
                 if (Array.isArray(record.fields.geo_point_2d)) {
@@ -142,7 +139,6 @@ async function fetchMunicipalities() {
                     ] as [number, number];
                 }
             }
-
             return {
                 id: record.recordid,
                 name: record.fields.mun_name || "Unknown",
@@ -154,7 +150,6 @@ async function fetchMunicipalities() {
             const marker = L.marker(municipality.coordinates)
                 .bindTooltip(municipality.name)
                 .on("click", () => showMunicipalityWeather(municipality));
-
             markerLayer.value?.addLayer(marker);
         });
     } catch (e) {
@@ -207,8 +202,12 @@ async function fetchWeatherData(
         const daysOver40 = maxTemps.filter((temp: number) => temp >= 40).length;
 
         // Count rainy and cloudy days
-        const rainyDays = precipitation.filter((rain: number) => rain > 0.1).length;
-        const cloudyDays = cloudCover.filter((cover: number) => cover > 70).length;
+        const rainyDays = precipitation.filter(
+            (rain: number) => rain > 0.1
+        ).length;
+        const cloudyDays = cloudCover.filter(
+            (cover: number) => cover > 70
+        ).length;
 
         return `
       <strong>Temperature Data for ${months[selectedMonth.value - 1]}:</strong>
@@ -216,7 +215,9 @@ async function fetchWeatherData(
         <li><strong>Maximum Temperature:</strong> ${maxTemp.toFixed(1)}°C</li>
         <li><strong>Minimum Temperature:</strong> ${minTemp.toFixed(1)}°C</li>
         <li><strong>Night Temperatures:</strong><br />
-            Min: ${minNightTemp.toFixed(1)}°C / Max: ${maxNightTemp.toFixed(1)}°C</li>
+            Min: ${minNightTemp.toFixed(1)}°C / Max: ${maxNightTemp.toFixed(
+            1
+        )}°C</li>
         <li>Days over 30°C: ${daysOver30}</li>
         <li>Days over 35°C: ${daysOver35}</li>
         <li>Days over 40°C: ${daysOver40}</li>
@@ -236,26 +237,22 @@ async function fetchWeatherData(
 async function showMunicipalityWeather(municipality: Municipality) {
     if (!map.value) return;
 
-    // Close any existing popup
-    if (activePopup.value) {
+    // Close any existing popup by calling closePopup() with no parameters
+    if (activePopup.value && map.value) {
         map.value.closePopup();
+        activePopup.value = null;
     }
 
-    // Create and show new popup
-    activePopup.value = L.popup()
-        .setLatLng(municipality.coordinates)
-        .setContent(
-            `
+    // Create a new popup using Leaflet's factory method
+    activePopup.value = L.popup().setLatLng(municipality.coordinates)
+        .setContent(`
       <div>
         <h3>${municipality.name}</h3>
         <p>Loading weather data...</p>
       </div>
-    `
-        );
-    
-    // Open the popup on the map - bypass type checking
-    // @ts-ignore - Leaflet types compatibility issue
-    activePopup.value.openOn(map.value);
+    `) as L.Popup;
+
+    activePopup.value.openOn(map.value as L.Map);
 
     // Fetch and update weather data
     const weatherData = await fetchWeatherData(municipality.coordinates);
@@ -265,7 +262,9 @@ async function showMunicipalityWeather(municipality: Municipality) {
       <div>
         <h3>${municipality.name}</h3>
         ${weatherData}
-        <p><i>Month: ${months[selectedMonth.value - 1]} ${selectedYear.value}</i></p>
+        <p><i>Month: ${months[selectedMonth.value - 1]} ${
+            selectedYear.value
+        }</i></p>
       </div>
     `);
     }
@@ -276,11 +275,11 @@ watch([selectedMonth, selectedYear], async () => {
     if (activePopup.value && map.value) {
         const popupLatLng = activePopup.value.getLatLng();
         if (popupLatLng) {
-            const activeMunicipality = municipalities.value.find((m) => 
-                m.coordinates[0] === popupLatLng.lat && 
-                m.coordinates[1] === popupLatLng.lng
+            const activeMunicipality = municipalities.value.find(
+                (m) =>
+                    m.coordinates[0] === popupLatLng.lat &&
+                    m.coordinates[1] === popupLatLng.lng
             );
-
             if (activeMunicipality) {
                 await showMunicipalityWeather(activeMunicipality);
             }
@@ -292,21 +291,19 @@ onMounted(() => {
     // Initialize map
     map.value = L.map("map").setView([40.4, -3.7], 6);
 
-    // Create tile layer
-    const tileLayer = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: "© OpenStreetMap contributors",
-    });
-    
-    // Add tile layer to map - bypass type checking
-    // @ts-ignore - Leaflet types compatibility issue
-    tileLayer.addTo(map.value);
+    // Create tile layer and add it to the map
+    const tileLayer = L.tileLayer(
+        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+        {
+            maxZoom: 19,
+            attribution: "© OpenStreetMap contributors",
+        }
+    );
+    tileLayer.addTo(map.value as L.Map);
 
-    // Initialize marker layer
+    // Initialize marker layer and add it to the map
     markerLayer.value = L.layerGroup();
-    // Add to map - bypass type checking
-    // @ts-ignore - Leaflet types compatibility issue
-    markerLayer.value.addTo(map.value);
+    (markerLayer.value as L.LayerGroup).addTo(map.value as L.Map);
 
     // Initial fetch of municipalities
     fetchMunicipalities();
