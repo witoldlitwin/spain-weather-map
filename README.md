@@ -75,3 +75,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - OpenDataSoft for providing the municipality data
 - Open-Meteo for the weather data API
 - OpenStreetMap contributors for the map tiles
+- [Spain icons created by amoghdesign - Flaticon](https://www.flaticon.com/free-icons/spain)

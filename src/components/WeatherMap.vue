@@ -237,7 +237,7 @@ async function showMunicipalityWeather(municipality: Municipality) {
 
     // Close any existing popup
     if (activePopup.value) {
-        map.value.closePopup(activePopup.value);
+        map.value.closePopup();
     }
 
     // Create and show new popup
@@ -250,8 +250,10 @@ async function showMunicipalityWeather(municipality: Municipality) {
         <p>Loading weather data...</p>
       </div>
     `
-        )
-        .openOn(map.value);
+        );
+    
+    // Open the popup on the map with type assertion
+    activePopup.value.openOn(map.value as L.Map);
 
     // Fetch and update weather data
     const weatherData = await fetchWeatherData(municipality.coordinates);
@@ -270,17 +272,16 @@ async function showMunicipalityWeather(municipality: Municipality) {
 // Watch for date changes and update active popup
 watch([selectedMonth, selectedYear], async () => {
     if (activePopup.value && map.value) {
-        const activeMunicipality = municipalities.value.find((m) => {
-            const popupLatLng = activePopup.value?.getLatLng();
-            return (
-                popupLatLng &&
-                m.coordinates[0] === popupLatLng.lat &&
+        const popupLatLng = activePopup.value.getLatLng();
+        if (popupLatLng) {
+            const activeMunicipality = municipalities.value.find((m) => 
+                m.coordinates[0] === popupLatLng.lat && 
                 m.coordinates[1] === popupLatLng.lng
             );
-        });
 
-        if (activeMunicipality) {
-            await showMunicipalityWeather(activeMunicipality);
+            if (activeMunicipality) {
+                await showMunicipalityWeather(activeMunicipality);
+            }
         }
     }
 });
@@ -289,14 +290,16 @@ onMounted(() => {
     // Initialize map
     map.value = L.map("map").setView([40.4, -3.7], 6);
 
-    // Add OpenStreetMap tiles
+    // Add OpenStreetMap tiles with type assertion
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
         attribution: "© OpenStreetMap contributors",
-    }).addTo(map.value);
+    }).addTo(map.value as L.Map);
 
     // Initialize marker layer
-    markerLayer.value = L.layerGroup().addTo(map.value);
+    markerLayer.value = L.layerGroup();
+    // Add to map with type assertion
+    markerLayer.value.addTo(map.value as L.Map);
 
     // Initial fetch of municipalities
     fetchMunicipalities();
