@@ -481,27 +481,33 @@ async function showMunicipalityWeather(municipality: Municipality) {
 }
 
 onMounted(() => {
-    // Initialize map
-    map.value = L.map("map").setView([40.4, -3.7], 6);
+    // Wait a moment for the DOM to be fully rendered
+    setTimeout(() => {
+        // Initialize map
+        map.value = L.map("map").setView([40.4, -3.7], 6);
 
-    // Create tile layer and add it to the map
-    const tileLayer = L.tileLayer(
-        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-        {
-            maxZoom: 19,
-            attribution: "© OpenStreetMap contributors",
-        }
-    );
-    tileLayer.addTo(map.value as L.Map);
+        // Create tile layer and add it to the map
+        const mapTileLayer = L.tileLayer(
+            "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+            {
+                maxZoom: 19,
+                attribution: "© OpenStreetMap contributors",
+            }
+        );
+        mapTileLayer.addTo(map.value as L.Map);
 
-    // Initialize and add marker layer
-    markerLayer.value = L.layerGroup();
-    (markerLayer.value as L.LayerGroup).addTo(map.value as L.Map);
+        // Initialize and add marker layer
+        markerLayer.value = L.layerGroup();
+        (markerLayer.value as L.LayerGroup).addTo(map.value as L.Map);
 
-    // Initial fetch of municipalities
-    fetchMunicipalities();
-    // Refresh municipalities when map moves
-    map.value.on("moveend", fetchMunicipalities);
+        // Initial fetch of municipalities
+        fetchMunicipalities();
+        // Refresh municipalities when map moves
+        map.value.on("moveend", fetchMunicipalities);
+        
+        // Force a resize event to ensure the map renders correctly
+        window.dispatchEvent(new Event('resize'));
+    }, 100);
 });
 </script>
 
@@ -532,7 +538,9 @@ onMounted(() => {
             <LanguageSwitcher />
         </div>
 
-        <div id="map"></div>
+        <div class="map-container">
+            <div id="map"></div>
+        </div>
 
         <div v-if="loading" class="loading">{{ t("weather.loading") }}</div>
         <div v-if="error" class="error">{{ t("weather.error") }}</div>
@@ -546,6 +554,7 @@ onMounted(() => {
     display: flex;
     flex-direction: column;
     font-family: 'Lato', sans-serif;
+    overflow: hidden; /* Prevent scrolling of the container */
 }
 
 .controls {
@@ -554,10 +563,23 @@ onMounted(() => {
     display: flex;
     gap: 1rem;
     border-bottom: 1px solid #eee;
-    z-index: 1000;
+    z-index: 1001; /* Higher z-index to stay above map */
     font-family: 'Lato', sans-serif;
     align-items: center;
     flex-wrap: wrap; /* Allow items to wrap on smaller screens */
+    position: fixed; /* Fixed position instead of sticky */
+    top: 0;
+    left: 0;
+    right: 0;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); /* Add subtle shadow for visual separation */
+}
+
+.map-container {
+    flex: 1;
+    margin-top: 60px; /* Add margin to account for the fixed header height */
+    position: relative;
+    width: 100%;
+    height: calc(100vh - 60px); /* Adjust height to account for the header */
 }
 
 .select-container {
@@ -580,8 +602,8 @@ select {
 }
 
 #map {
-    flex: 1;
     width: 100%;
+    height: 100%;
     z-index: 1;
 }
 
@@ -631,6 +653,11 @@ select {
     
     .controls-spacer {
         display: none; /* Hide the spacer on mobile */
+    }
+    
+    .map-container {
+        margin-top: 150px; /* Increase margin for mobile to account for taller header */
+        height: calc(100vh - 150px); /* Adjust height for mobile */
     }
 }
 
