@@ -73,6 +73,160 @@ const municipalities = ref<Municipality[]>([]);
 const markerLayer = ref<L.LayerGroup | null>(null);
 const activePopup = ref<L.Popup | null>(null);
 
+// Search functionality
+const searchQuery = ref("");
+const isSearching = ref(false);
+const allMunicipalities = ref<Municipality[]>([]);
+const searchTimeout = ref<number | null>(null);
+
+// Function to search for municipalities by name
+async function searchMunicipalities(query: string) {
+    if (!query.trim()) return;
+    
+    try {
+        isSearching.value = true;
+        
+        console.log(`Searching for municipalities with query: ${query}`);
+        
+        // Try a more flexible search approach
+        const response = await axios.get(
+            "https://public.opendatasoft.com/api/records/1.0/search/",
+            {
+                params: {
+                    dataset: "georef-spain-municipio",
+                    rows: 10, // Limit to 10 results
+                    q: query, // Use a simpler query without field restrictions
+                    refine: {
+                        country_code: "ESP"
+                    }
+                }
+            }
+        );
+        
+        console.log(`Found ${response.data.records.length} municipalities matching "${query}"`);
+        
+        // Process the municipalities
+        const searchResults = response.data.records.map((record: any) => {
+            let coordinates: [number, number] = [0, 0];
+            if (record.fields && record.fields.geo_point_2d) {
+                if (Array.isArray(record.fields.geo_point_2d)) {
+                    coordinates = [
+                        record.fields.geo_point_2d[0],
+                        record.fields.geo_point_2d[1],
+                    ] as [number, number];
+                } else if (typeof record.fields.geo_point_2d === "object") {
+                    coordinates = [
+                        record.fields.geo_point_2d.lat || 0,
+                        record.fields.geo_point_2d.lon || 0,
+                    ] as [number, number];
+                }
+            }
+            return {
+                id: record.recordid,
+                name: record.fields.mun_name || "Unknown",
+                coordinates,
+            };
+        });
+        
+        // If no results found with the first approach, try a fallback approach
+        if (searchResults.length === 0) {
+            console.log("No results with first approach, trying fallback...");
+            
+            const fallbackResponse = await axios.get(
+                "https://public.opendatasoft.com/api/records/1.0/search/",
+                {
+                    params: {
+                        dataset: "georef-spain-municipio",
+                        rows: 100, // Get more results for client-side filtering
+                        q: `country_code:ESP`,
+                    }
+                }
+            );
+            
+            // Client-side filtering for more flexible matching
+            const fallbackResults = fallbackResponse.data.records
+                .map((record: any) => {
+                    let coordinates: [number, number] = [0, 0];
+                    if (record.fields && record.fields.geo_point_2d) {
+                        if (Array.isArray(record.fields.geo_point_2d)) {
+                            coordinates = [
+                                record.fields.geo_point_2d[0],
+                                record.fields.geo_point_2d[1],
+                            ] as [number, number];
+                        } else if (typeof record.fields.geo_point_2d === "object") {
+                            coordinates = [
+                                record.fields.geo_point_2d.lat || 0,
+                                record.fields.geo_point_2d.lon || 0,
+                            ] as [number, number];
+                        }
+                    }
+                    return {
+                        id: record.recordid,
+                        name: record.fields.mun_name || "Unknown",
+                        coordinates,
+                    };
+                })
+                .filter((municipality: Municipality) => 
+                    municipality.name.toLowerCase().includes(query.toLowerCase())
+                )
+                .slice(0, 10); // Limit to 10 results
+                
+            console.log(`Found ${fallbackResults.length} municipalities with fallback approach`);
+            
+            if (fallbackResults.length > 0) {
+                allMunicipalities.value = fallbackResults;
+                return;
+            }
+        }
+        
+        // Update our search results if the first approach worked
+        allMunicipalities.value = searchResults;
+        
+    } catch (e) {
+        console.error("Error searching municipalities:", e);
+        error.value = "Error searching municipalities";
+    } finally {
+        isSearching.value = false;
+    }
+}
+
+// Debounce search input to prevent excessive API calls
+watch(searchQuery, (newQuery) => {
+    if (searchTimeout.value) {
+        clearTimeout(searchTimeout.value);
+    }
+    
+    if (newQuery.trim().length > 0) {
+        // Set a timeout to avoid making API calls on every keystroke
+        searchTimeout.value = window.setTimeout(() => {
+            searchMunicipalities(newQuery.trim());
+        }, 300); // 300ms debounce
+    }
+});
+
+const filteredMunicipalities = computed(() => {
+    if (!searchQuery.value.trim()) return [];
+    
+    // No need to filter here as we're already getting filtered results from the API
+    return allMunicipalities.value;
+});
+
+// Function to handle municipality selection from search
+function selectMunicipality(municipality: Municipality) {
+    if (!map.value) return;
+    
+    console.log("Selected municipality:", municipality);
+    
+    // Clear search
+    searchQuery.value = "";
+    
+    // Zoom to the selected municipality
+    map.value.setView(municipality.coordinates, 12);
+    
+    // Show the weather popup
+    showMunicipalityWeather(municipality);
+}
+
 const { t, locale } = useI18n();
 
 // Replace the months array with a computed property that uses translations
@@ -502,6 +656,7 @@ onMounted(() => {
 
         // Initial fetch of municipalities
         fetchMunicipalities();
+        
         // Refresh municipalities when map moves
         map.value.on("moveend", fetchMunicipalities);
         
@@ -534,6 +689,43 @@ onMounted(() => {
                     </option>
                 </select>
             </div>
+            
+            <!-- Search box -->
+            <div class="search-container">
+                <label for="municipality-search">{{ t("controls.search") }}</label>
+                <div class="search-input-container">
+                    <input
+                        type="text"
+                        id="municipality-search"
+                        v-model="searchQuery"
+                        :placeholder="t('search.placeholder')"
+                        autocomplete="off"
+                    />
+                    <button 
+                        v-if="searchQuery.trim()" 
+                        class="clear-search" 
+                        @click="searchQuery = ''"
+                        title="Clear search"
+                    >
+                        ×
+                    </button>
+                    <div v-if="searchQuery.trim() && (filteredMunicipalities.length > 0 || isSearching)" class="search-results">
+                        <div v-if="isSearching" class="search-message">{{ t('search.searching') }}</div>
+                        <div v-else-if="filteredMunicipalities.length === 0" class="search-message">{{ t('search.noResults') }}</div>
+                        <ul v-else>
+                            <li 
+                                v-for="municipality in filteredMunicipalities" 
+                                :key="municipality.id"
+                                @click="selectMunicipality(municipality)"
+                                class="search-result-item"
+                            >
+                                {{ municipality.name }}
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+            
             <div class="controls-spacer"></div>
             <LanguageSwitcher />
         </div>
@@ -601,6 +793,98 @@ select {
     min-width: 120px; /* Set minimum width to prevent tiny selects */
 }
 
+/* Search styles */
+.search-container {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    position: relative;
+    flex: 1;
+    max-width: 300px;
+}
+
+.search-container label {
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.search-input-container {
+    position: relative;
+    flex: 1;
+    width: 100%; /* Ensure container takes full width */
+}
+
+.search-input-container input {
+    width: 100%;
+    padding: 0.5rem;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-family: 'Lato', sans-serif;
+    font-size: 1rem;
+    padding-right: 30px; /* Make room for the clear button */
+    box-sizing: border-box; /* Include padding and border in the width calculation */
+}
+
+.clear-search {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    font-size: 1.2rem;
+    color: #999;
+    cursor: pointer;
+    padding: 0;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+}
+
+.clear-search:hover {
+    color: #333;
+    background-color: #f0f0f0;
+}
+
+.search-results {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #ccc;
+    border-radius: 0 0 4px 4px;
+    max-height: 300px;
+    overflow-y: auto;
+    z-index: 1002;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+.search-results ul {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.search-result-item {
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.search-result-item:hover {
+    background-color: #f0f0f0;
+}
+
+.search-message {
+    padding: 0.5rem 1rem;
+    color: #666;
+    font-style: italic;
+}
+
 #map {
     width: 100%;
     height: 100%;
@@ -641,14 +925,23 @@ select {
         gap: 0.75rem;
     }
     
-    .select-container {
+    .select-container, .search-container {
         width: 100%;
+        display: flex;
         justify-content: space-between;
+        max-width: none;
     }
     
-    select {
+    .select-container label, .search-container label {
+        min-width: 70px; /* Fixed width for labels on mobile */
+        width: 70px;
+        text-align: right; /* Right-align labels */
+        margin-right: 10px; /* Add some space between label and input */
+    }
+    
+    select, .search-input-container {
         flex: 1;
-        max-width: calc(100% - 100px); /* Give space for the label */
+        width: calc(100% - 80px); /* Consistent width for all inputs */
     }
     
     .controls-spacer {
@@ -656,8 +949,8 @@ select {
     }
     
     .map-container {
-        margin-top: 150px; /* Increase margin for mobile to account for taller header */
-        height: calc(100vh - 150px); /* Adjust height for mobile */
+        margin-top: 180px; /* Increase margin for mobile to account for taller header */
+        height: calc(100vh - 180px); /* Adjust height for mobile */
     }
 }
 

@@ -1,7 +1,8 @@
 {
   "controls": {
     "month": "Month:",
-    "year": "Year:"
+    "year": "Year:",
+    "search": "Search:"
   },
   "months": {
     "january": "January",
@@ -39,5 +40,11 @@
     "select": "Language:",
     "en": "English",
     "pl": "Polish"
+  },
+  "search": {
+    "placeholder": "Type to search...",
+    "noResults": "No municipalities found",
+    "searching": "Searching...",
+    "selectMunicipality": "Select a municipality"
   }
 } 

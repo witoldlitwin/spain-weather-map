@@ -53,18 +53,27 @@ select {
   font-family: 'Lato', sans-serif;
   font-size: 1rem;
   min-width: 120px;
+  box-sizing: border-box; /* Include padding and border in the width calculation */
 }
 
 /* Responsive styles for mobile */
 @media (max-width: 640px) {
   .select-container {
     width: 100%;
+    display: flex;
     justify-content: space-between;
+  }
+  
+  .select-container label {
+    min-width: 70px; /* Fixed width for labels on mobile */
+    width: 70px;
+    text-align: right; /* Right-align labels */
+    margin-right: 10px; /* Add some space between label and input */
   }
   
   select {
     flex: 1;
-    max-width: calc(100% - 100px); /* Give space for the label */
+    width: calc(100% - 80px); /* Consistent width for all inputs */
   }
 }
 </style> 

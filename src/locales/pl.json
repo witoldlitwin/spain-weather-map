@@ -1,7 +1,8 @@
 {
   "controls": {
     "month": "Miesiąc:",
-    "year": "Rok:"
+    "year": "Rok:",
+    "search": "Szukaj:"
   },
   "months": {
     "january": "Styczeń",
@@ -39,5 +40,11 @@
     "select": "Język:",
     "en": "Angielski",
     "pl": "Polski"
+  },
+  "search": {
+    "placeholder": "Wpisz, aby wyszukać...",
+    "noResults": "Nie znaleziono gmin",
+    "searching": "Wyszukiwanie...",
+    "selectMunicipality": "Wybierz gminę"
   }
 } 

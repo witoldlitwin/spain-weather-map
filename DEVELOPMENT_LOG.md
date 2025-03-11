@@ -227,4 +227,131 @@ mkdir -p src/locales
 ### Next Steps
 - Test font rendering across different browsers and devices
 - Consider adding font loading optimization techniques
-- Gather user feedback on readability and visual appeal 
+- Gather user feedback on readability and visual appeal
+
+## 2023-08-10 14:30
+- Added municipality search functionality to the weather map
+- Implemented search box with autocomplete suggestions
+- Added translations for search functionality in English and Polish
+- Implemented functionality to zoom to selected municipality and show weather data
+- Styled search box and dropdown to match the existing UI
+
+### Commands ran:
+- None (direct code edits)
+
+### Next steps:
+- Test the search functionality
+- Consider adding a clear button for the search box
+- Consider adding keyboard navigation for the search results
+
+## 2024-08-10 16:45
+- Fixed municipality search functionality
+- Resolved 400 Bad Request error when fetching municipalities
+- Implemented on-demand search with API filtering
+- Added debounce to prevent excessive API calls
+- Added clear button for the search box
+
+### Changes Made:
+1. Modified search approach:
+   - Changed from client-side filtering to server-side filtering
+   - Reduced batch size from 2000 to 10 records
+   - Added proper query parameter to filter by municipality name
+   - Implemented 300ms debounce to prevent excessive API calls
+
+2. Improved error handling:
+   - Added better error messages
+   - Added console logging for debugging
+   - Improved user feedback during search
+
+3. Enhanced user experience:
+   - Added clear button for the search box
+   - Improved styling of search results
+   - Fixed dropdown display issues
+
+### Next steps:
+- Test the search functionality with various municipality names
+- Consider adding keyboard navigation for search results
+- Monitor API usage and optimize if needed
+
+## 2024-08-10 17:30
+- Improved municipality search functionality to better handle partial matches
+- Implemented a two-tier search approach for more reliable results
+
+### Changes Made:
+1. Modified primary search approach:
+   - Changed from field-specific query to general search query
+   - Used the refine parameter to filter by country code
+   - Simplified query structure for better matching
+
+2. Added fallback search mechanism:
+   - Implemented a secondary search approach when primary returns no results
+   - Fetches a larger batch of municipalities (100)
+   - Performs client-side filtering for more flexible matching
+   - Ensures municipalities like "Hinojos" can be found with partial queries
+
+3. Improved logging:
+   - Added more detailed console logs for debugging
+   - Added log for fallback approach results
+
+### Next steps:
+- Test the improved search with various municipality names
+- Consider caching search results to reduce API calls
+- Monitor API usage and optimize if needed
+
+## 2024-08-10 18:15
+- Fixed search styling on mobile devices
+- Updated translations for search labels
+
+### Changes Made:
+1. Improved mobile styling:
+   - Fixed search box width on mobile screens
+   - Added fixed width (70px) for labels on mobile
+   - Removed max-width constraint for input fields to allow them to use available space
+
+2. Updated translations:
+   - Changed "Search municipality:" to "Search:" in English
+   - Changed "Szukaj gminy:" to "Szukaj:" in Polish
+   - Made labels more concise to save space on mobile
+
+### Next steps:
+- Test the mobile layout on various device sizes
+- Consider further mobile optimizations if needed
+
+## 2024-08-10 18:45
+- Fixed mobile styling issues with form controls
+
+### Changes Made:
+1. Improved mobile form layout:
+   - Ensured consistent widths for all input fields
+   - Right-aligned all labels for better visual alignment
+   - Added margin between labels and inputs for better spacing
+   - Fixed display issues with form controls
+
+2. Enhanced mobile responsiveness:
+   - Added explicit display:flex to container elements
+   - Set fixed width calculation for input fields
+   - Improved spacing and alignment of form elements
+
+### Next steps:
+- Test the mobile layout on various device sizes and orientations
+- Consider further mobile optimizations if needed
+
+## 2024-08-10 19:15
+- Fixed search input width issue and language switcher styling on mobile
+
+### Changes Made:
+1. Fixed search input width issue:
+   - Added `width: 100%` to search-input-container to ensure it takes full width
+   - Added `box-sizing: border-box` to input elements to include padding in width calculation
+   - Ensured search input doesn't overflow its container
+
+2. Improved LanguageSwitcher mobile styling:
+   - Updated LanguageSwitcher.vue to match the styling of month and year inputs
+   - Added right-aligned labels with fixed width (70px)
+   - Set consistent width calculation for select elements
+   - Added proper spacing between label and input
+   - Ensured consistent styling across all form controls
+
+### Next steps:
+- Test the mobile layout on various device sizes and orientations
+- Ensure consistent styling across all browsers 
