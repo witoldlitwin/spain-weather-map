@@ -557,6 +557,7 @@ onMounted(() => {
     z-index: 1000;
     font-family: 'Lato', sans-serif;
     align-items: center;
+    flex-wrap: wrap; /* Allow items to wrap on smaller screens */
 }
 
 .select-container {
@@ -575,6 +576,7 @@ select {
     border-radius: 4px;
     font-family: 'Lato', sans-serif;
     font-size: 1rem;
+    min-width: 120px; /* Set minimum width to prevent tiny selects */
 }
 
 #map {
@@ -601,6 +603,35 @@ select {
 .error {
     background: rgba(255, 0, 0, 0.1);
     color: red;
+}
+
+.controls-spacer {
+    flex: 1;
+    min-width: 20px; /* Ensure the spacer doesn't collapse completely on small screens */
+}
+
+/* Responsive adjustments for mobile */
+@media (max-width: 640px) {
+    .controls {
+        padding: 0.75rem;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.75rem;
+    }
+    
+    .select-container {
+        width: 100%;
+        justify-content: space-between;
+    }
+    
+    select {
+        flex: 1;
+        max-width: calc(100% - 100px); /* Give space for the label */
+    }
+    
+    .controls-spacer {
+        display: none; /* Hide the spacer on mobile */
+    }
 }
 
 /* Add global styles for the popup */
@@ -675,9 +706,5 @@ select {
     font-weight: 400;
     color: #666;
     font-size: 0.9rem;
-}
-
-.controls-spacer {
-    flex: 1;
 }
 </style>
