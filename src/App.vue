@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import WeatherMap from './components/WeatherMap.vue'
-import LanguageSwitcher from './components/LanguageSwitcher.vue'
 </script>
 
 <template>
