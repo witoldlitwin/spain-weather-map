@@ -1,0 +1,43 @@
+{
+  "controls": {
+    "month": "Month:",
+    "year": "Year:"
+  },
+  "months": {
+    "january": "January",
+    "february": "February",
+    "march": "March",
+    "april": "April",
+    "may": "May",
+    "june": "June",
+    "july": "July",
+    "august": "August",
+    "september": "September",
+    "october": "October",
+    "november": "November",
+    "december": "December"
+  },
+  "weather": {
+    "loading": "Loading municipalities...",
+    "loadingData": "Loading weather data...",
+    "error": "Error fetching municipalities",
+    "errorData": "Error fetching weather data",
+    "temperatureData": "Weather for {month}:",
+    "maxTemperature": "Max temp:",
+    "minTemperature": "Min temp:",
+    "nightTemperatures": "Night temp:",
+    "apparentTemperatures": "Feels like:",
+    "min": "Min",
+    "max": "Max",
+    "daysOver": "Days > {temp}°C:",
+    "precipitationData": "Precipitation & Clouds:",
+    "rainyDays": "Rainy days:",
+    "cloudyDays": "Cloudy days:",
+    "month": "Month: {month} {year}"
+  },
+  "language": {
+    "select": "Language:",
+    "en": "English",
+    "pl": "Polish"
+  }
+} 

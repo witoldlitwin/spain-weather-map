@@ -3,6 +3,26 @@ import { onMounted, ref, watch, computed } from "vue";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import axios from "axios";
+import { useI18n } from "vue-i18n";
+
+// Cookie utility functions
+function setCookie(name: string, value: string, days: number = 365): void {
+    const date = new Date();
+    date.setTime(date.getTime() + days * 24 * 60 * 60 * 1000);
+    const expires = `expires=${date.toUTCString()}`;
+    document.cookie = `${name}=${value};${expires};path=/`;
+}
+
+function getCookie(name: string): string | null {
+    const nameEQ = `${name}=`;
+    const ca = document.cookie.split(';');
+    for (let i = 0; i < ca.length; i++) {
+        let c = ca[i];
+        while (c.charAt(0) === ' ') c = c.substring(1);
+        if (c.indexOf(nameEQ) === 0) return c.substring(nameEQ.length, c.length);
+    }
+    return null;
+}
 
 interface Municipality {
     id: string;
@@ -15,44 +35,77 @@ const currentDate = new Date();
 const currentYear = currentDate.getFullYear();
 const currentMonth = currentDate.getMonth() + 1; // 1-indexed month
 
-const selectedMonth = ref(Math.min(currentMonth - 1, 12) || 12); // Default to previous month (or December)
-const selectedYear = ref(currentMonth === 1 ? currentYear - 1 : currentYear);
+// Get saved values from cookies or use defaults
+const getSavedMonth = (): number => {
+    const savedMonth = getCookie('selectedMonth');
+    if (savedMonth) {
+        const month = parseInt(savedMonth);
+        // Validate the month is within range
+        if (month >= 1 && month <= 12) {
+            // For current year, ensure month is not in the future
+            if (parseInt(getCookie('selectedYear') || `${currentYear}`) === currentYear) {
+                return month < currentMonth ? month : Math.max(1, currentMonth - 1);
+            }
+            return month;
+        }
+    }
+    return Math.min(currentMonth - 1, 12) || 12; // Default to previous month (or December)
+};
+
+const getSavedYear = (): number => {
+    const savedYear = getCookie('selectedYear');
+    if (savedYear) {
+        const year = parseInt(savedYear);
+        // Validate the year is within range (current year to 4 years back)
+        if (year >= currentYear - 4 && year <= currentYear) {
+            return year;
+        }
+    }
+    return currentMonth === 1 ? currentYear - 1 : currentYear;
+};
+
+const selectedMonth = ref(getSavedMonth());
+const selectedYear = ref(getSavedYear());
 const loading = ref(false);
 const error = ref("");
 const municipalities = ref<Municipality[]>([]);
 const markerLayer = ref<L.LayerGroup | null>(null);
 const activePopup = ref<L.Popup | null>(null);
 
-const months = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-];
+const { t, locale } = useI18n();
+
+// Replace the months array with a computed property that uses translations
+const months = computed(() => [
+    t("months.january"),
+    t("months.february"),
+    t("months.march"),
+    t("months.april"),
+    t("months.may"),
+    t("months.june"),
+    t("months.july"),
+    t("months.august"),
+    t("months.september"),
+    t("months.october"),
+    t("months.november"),
+    t("months.december"),
+]);
 
 // Generate available years (current year and 4 years back)
 const years = Array.from({ length: 5 }, (_, i) => currentYear - i);
 
 // Compute available months based on selected year
 const availableMonths = computed(() => {
+    const monthNames = months.value;
     if (selectedYear.value === currentYear) {
         // For current year, only show months up to one month before current
-        return months.slice(0, currentMonth - 1).map((name, index) => ({
-            name,
-            value: index + 1,
+        return Array.from({ length: currentMonth - 1 }, (_, i) => ({
+            name: monthNames[i],
+            value: i + 1,
         }));
     } else {
-        return months.map((name, index) => ({
-            name,
-            value: index + 1,
+        return Array.from({ length: 12 }, (_, i) => ({
+            name: monthNames[i],
+            value: i + 1,
         }));
     }
 });
@@ -63,6 +116,136 @@ watch(selectedYear, (newYear) => {
         selectedMonth.value = currentMonth - 1;
     }
 });
+
+// Watch for locale changes to update the UI
+watch(locale, async () => {
+    // If there's an active popup, update it with the new language
+    if (activePopup.value && map.value) {
+        const popupLatLng = activePopup.value.getLatLng();
+        if (popupLatLng) {
+            const activeMunicipality = municipalities.value.find(
+                (m) =>
+                    m.coordinates[0] === popupLatLng.lat &&
+                    m.coordinates[1] === popupLatLng.lng
+            );
+            if (activeMunicipality) {
+                await showMunicipalityWeather(activeMunicipality);
+            }
+        }
+    }
+});
+
+// Watch for month and year changes to save to cookies
+watch([selectedMonth, selectedYear], ([month, year]) => {
+    setCookie('selectedMonth', month.toString());
+    setCookie('selectedYear', year.toString());
+    
+    // Also update any active popup
+    if (activePopup.value && map.value) {
+        const popupLatLng = activePopup.value.getLatLng();
+        if (popupLatLng) {
+            const activeMunicipality = municipalities.value.find(
+                (m) =>
+                    m.coordinates[0] === popupLatLng.lat &&
+                    m.coordinates[1] === popupLatLng.lng
+            );
+            if (activeMunicipality) {
+                showMunicipalityWeather(activeMunicipality);
+            }
+        }
+    }
+});
+
+// Function to get appropriate weather emojis based on temperature values
+function getWeatherEmojis(
+  maxTemp: number,
+  minTemp: number,
+  maxNightTemp: number | null,
+  minNightTemp: number | null,
+  rainyDays: number,
+  cloudyDays: number,
+  totalDays: number
+): { 
+  maxTempEmoji: string, 
+  minTempEmoji: string,
+  nightEmoji: string, 
+  rainEmoji: string, 
+  cloudEmoji: string 
+} {
+  // Max temperature emoji
+  let maxTempEmoji = '🌡️';
+  if (maxTemp >= 38) {
+    maxTempEmoji = '🔥'; // Fire for extremely hot
+  } else if (maxTemp >= 30) {
+    maxTempEmoji = '☀️'; // Sun for very hot
+  } else if (maxTemp >= 20) {
+    maxTempEmoji = '😎'; // Cool face for warm
+  } else if (maxTemp >= 15) {
+    maxTempEmoji = '🌤️'; // Sun with cloud for mild
+  } else if (maxTemp >= 0) {
+    maxTempEmoji = '🧥'; // Coat for cold
+  } else {
+    maxTempEmoji = '❄️'; // Freezing face for very cold
+  }
+
+  // Min temperature emoji using same thresholds but for min temperature
+  let minTempEmoji = '🌡️';
+  if (minTemp >= 38) {
+    minTempEmoji = '🔥'; // Fire for extremely hot
+  } else if (minTemp >= 30) {
+    minTempEmoji = '☀️'; // Sun for very hot
+  } else if (minTemp >= 20) {
+    minTempEmoji = '😎'; // Cool face for warm
+  } else if (minTemp >= 15) {
+    minTempEmoji = '🌤️'; // Sun with cloud for mild
+  } else if (minTemp >= 0) {
+    minTempEmoji = '🧥'; // Coat for cold
+  } else {
+    minTempEmoji = '❄️'; // Freezing face for very cold
+  }
+
+  // Night temperature emoji
+  let nightEmoji = '🌙';
+  if (maxNightTemp !== null && minNightTemp !== null) {
+    if (maxNightTemp >= 25) {
+      nightEmoji = '🌡️'; // Hot night
+    } else if (minNightTemp <= 5) {
+      nightEmoji = '❄️'; // Cold night
+    }
+  }
+
+  // Rain emoji based on percentage of rainy days
+  let rainEmoji = '☔';
+  const rainPercentage = (rainyDays / totalDays) * 100;
+  if (rainPercentage === 0) {
+    rainEmoji = '🏜️'; // Desert for no rain
+  } else if (rainPercentage < 10) {
+    rainEmoji = '💧'; // Droplet for very little rain
+  } else if (rainPercentage < 30) {
+    rainEmoji = '🌂'; // Umbrella for some rain
+  } else if (rainPercentage < 60) {
+    rainEmoji = '☔'; // Umbrella with rain for moderate rain
+  } else {
+    rainEmoji = '🌧️'; // Rain cloud for lots of rain
+  }
+
+  // Cloud emoji based on percentage of cloudy days
+  let cloudEmoji = '☁️';
+  const cloudPercentage = (cloudyDays / totalDays) * 100;
+  if (cloudPercentage < 10) {
+    cloudEmoji = '☀️'; // Sun for clear skies
+  } else if (cloudPercentage < 30) {
+    cloudEmoji = '🌤️'; // Sun with small cloud for mostly clear
+  } else if (cloudPercentage < 60) {
+    cloudEmoji = '⛅'; // Sun behind cloud for partly cloudy
+  } else if (cloudPercentage < 80) {
+    cloudEmoji = '🌥️'; // Sun behind large cloud for mostly cloudy
+  } else {
+    cloudEmoji = '☁️'; // Cloud for very cloudy
+  }
+
+  return { maxTempEmoji, minTempEmoji, nightEmoji, rainEmoji, cloudEmoji };
+}
 
 async function fetchMunicipalities() {
     if (!map.value) return;
@@ -215,39 +398,49 @@ async function fetchWeatherData(
             (cover: number) => cover > 70
         ).length;
 
-        // Build the HTML for the popup
+        // Get appropriate emojis based on weather data
+        const totalDays = maxTemps.length;
+        const { maxTempEmoji, minTempEmoji, nightEmoji, rainEmoji, cloudEmoji } = getWeatherEmojis(
+            maxTemp,
+            minTemp,
+            maxNightTemp,
+            minNightTemp,
+            rainyDays,
+            cloudyDays,
+            totalDays
+        );
+
+        // Build the HTML for the popup with improved layout
         let temperaturesHtml = `
-      <strong>Temperature Data for ${months[selectedMonth.value - 1]}:</strong>
-      <ul>
-        <li><strong>Maximum Temperature:</strong> ${maxTemp.toFixed(1)}°C</li>
-        <li><strong>Minimum Temperature:</strong> ${minTemp.toFixed(1)}°C</li>`;
+      <strong>${t("weather.temperatureData", { month: months.value[selectedMonth.value - 1] })}</strong>
+      <ul class="weather-data-list">
+        <li><span class="weather-label">${t("weather.maxTemperature")}</span> <span class="weather-value">${maxTempEmoji} ${maxTemp.toFixed(1)}°C</span></li>
+        <li><span class="weather-label">${t("weather.minTemperature")}</span> <span class="weather-value">${minTempEmoji} ${minTemp.toFixed(1)}°C</span></li>`;
         
         // Add night temperature section if data is available
         if (maxNightTemp !== null && minNightTemp !== null) {
             temperaturesHtml += `
-        <li><strong>Night Temperatures (22:00-05:00):</strong><br />
-            Min: ${minNightTemp.toFixed(1)}°C / Max: ${maxNightTemp.toFixed(1)}°C</li>`;
+        <li><span class="weather-label">${t("weather.nightTemperatures")}</span> <span class="weather-value">${nightEmoji} ${minNightTemp.toFixed(1)}°C - ${maxNightTemp.toFixed(1)}°C</span></li>`;
         }
         
         // Add apparent temperature section
         temperaturesHtml += `
-        <li><strong>Apparent ("Feels Like") Temperatures:</strong><br />
-            Min: ${minApparentTemp.toFixed(1)}°C / Max: ${maxApparentTemp.toFixed(1)}°C</li>
-        <li>Days over 30°C: ${daysOver30}</li>
-        <li>Days over 35°C: ${daysOver35}</li>
-        <li>Days over 40°C: ${daysOver40}</li>
+        <li><span class="weather-label">${t("weather.apparentTemperatures")}</span> <span class="weather-value">${minApparentTemp.toFixed(1)}°C - ${maxApparentTemp.toFixed(1)}°C</span></li>
+        <li><span class="weather-label">${t("weather.daysOver", { temp: 30 })}</span> <span class="weather-value">${daysOver30}</span></li>
+        <li><span class="weather-label">${t("weather.daysOver", { temp: 35 })}</span> <span class="weather-value">${daysOver35}</span></li>
+        <li><span class="weather-label">${t("weather.daysOver", { temp: 40 })}</span> <span class="weather-value">${daysOver40}</span></li>
       </ul>
-      <strong>Precipitation & Cloud Data:</strong>
-      <ul>
-        <li>Rainy Days (>0.1mm): ${rainyDays}</li>
-        <li>Cloudy Days (>70%): ${cloudyDays}</li>
+      <strong>${t("weather.precipitationData")}</strong>
+      <ul class="weather-data-list precipitation-list">
+        <li><span class="weather-label">${t("weather.rainyDays")}</span> <span class="weather-value">${rainEmoji} ${rainyDays}</span></li>
+        <li><span class="weather-label">${t("weather.cloudyDays")}</span> <span class="weather-value">${cloudEmoji} ${cloudyDays}</span></li>
       </ul>
     `;
         
         return temperaturesHtml;
     } catch (e) {
         console.error("Error fetching weather data:", e);
-        return "Error fetching weather data";
+        return t("weather.errorData");
     }
 }
 
@@ -261,11 +454,14 @@ async function showMunicipalityWeather(municipality: Municipality) {
     }
 
     // Create and open a new popup
-    activePopup.value = L.popup().setLatLng(municipality.coordinates)
+    activePopup.value = L.popup({
+        className: 'weather-popup', // Add custom class for styling
+        maxWidth: 350 // Increase max width for better readability
+    }).setLatLng(municipality.coordinates)
         .setContent(`
-      <div>
+      <div class="popup-content">
         <h3>${municipality.name}</h3>
-        <p>Loading weather data...</p>
+        <p>${t("weather.loadingData")}</p>
       </div>
     `) as L.Popup;
     activePopup.value.openOn(map.value as L.Map);
@@ -274,33 +470,14 @@ async function showMunicipalityWeather(municipality: Municipality) {
     const weatherData = await fetchWeatherData(municipality.coordinates);
     if (activePopup.value) {
         activePopup.value.setContent(`
-      <div>
+      <div class="popup-content">
         <h3>${municipality.name}</h3>
         ${weatherData}
-        <p><i>Month: ${months[selectedMonth.value - 1]} ${
-            selectedYear.value
-        }</i></p>
+        <p><i>${t("weather.month", { month: months.value[selectedMonth.value - 1], year: selectedYear.value })}</i></p>
       </div>
     `);
     }
 }
-
-// Update popup content if month or year changes
-watch([selectedMonth, selectedYear], async () => {
-    if (activePopup.value && map.value) {
-        const popupLatLng = activePopup.value.getLatLng();
-        if (popupLatLng) {
-            const activeMunicipality = municipalities.value.find(
-                (m) =>
-                    m.coordinates[0] === popupLatLng.lat &&
-                    m.coordinates[1] === popupLatLng.lng
-            );
-            if (activeMunicipality) {
-                await showMunicipalityWeather(activeMunicipality);
-            }
-        }
-    }
-});
 
 onMounted(() => {
     // Initialize map
@@ -331,7 +508,7 @@ onMounted(() => {
     <div class="weather-map-container">
         <div class="controls">
             <div class="select-container">
-                <label for="month">Month:</label>
+                <label for="month">{{ t("controls.month") }}</label>
                 <select v-model="selectedMonth" id="month">
                     <option
                         v-for="month in availableMonths"
@@ -343,7 +520,7 @@ onMounted(() => {
                 </select>
             </div>
             <div class="select-container">
-                <label for="year">Year:</label>
+                <label for="year">{{ t("controls.year") }}</label>
                 <select v-model="selectedYear" id="year">
                     <option v-for="year in years" :key="year" :value="year">
                         {{ year }}
@@ -354,8 +531,8 @@ onMounted(() => {
 
         <div id="map"></div>
 
-        <div v-if="loading" class="loading">Loading municipalities...</div>
-        <div v-if="error" class="error">{{ error }}</div>
+        <div v-if="loading" class="loading">{{ t("weather.loading") }}</div>
+        <div v-if="error" class="error">{{ t("weather.error") }}</div>
     </div>
 </template>
 
@@ -365,6 +542,7 @@ onMounted(() => {
     height: 100vh;
     display: flex;
     flex-direction: column;
+    font-family: 'Lato', sans-serif;
 }
 
 .controls {
@@ -374,6 +552,7 @@ onMounted(() => {
     gap: 1rem;
     border-bottom: 1px solid #eee;
     z-index: 1000;
+    font-family: 'Lato', sans-serif;
 }
 
 .select-container {
@@ -382,10 +561,16 @@ onMounted(() => {
     gap: 0.5rem;
 }
 
+.select-container label {
+    font-weight: 600;
+}
+
 select {
     padding: 0.5rem;
     border: 1px solid #ccc;
     border-radius: 4px;
+    font-family: 'Lato', sans-serif;
+    font-size: 1rem;
 }
 
 #map {
@@ -412,5 +597,79 @@ select {
 .error {
     background: rgba(255, 0, 0, 0.1);
     color: red;
+}
+
+/* Add global styles for the popup */
+:global(.weather-popup) {
+    font-family: 'Lato', sans-serif;
+    font-size: 1rem; /* Set base font size to 1rem (16px) */
+    min-width: 320px; /* Set minimum width for the popup */
+}
+
+:global(.weather-popup .popup-content) {
+    font-size: 1rem;
+    line-height: 1.5;
+    font-weight: 400;
+    width: 100%; /* Ensure content takes full width of the popup */
+}
+
+:global(.weather-popup h3) {
+    font-family: 'Lato', sans-serif;
+    font-size: 1.25rem;
+    font-weight: 700;
+    margin-top: 0;
+    margin-bottom: 0.75rem;
+    color: #2b82cb;
+}
+
+:global(.weather-popup ul.weather-data-list) {
+    margin: 0.5rem 0;
+    padding-left: 0;
+    list-style-type: none;
+}
+
+:global(.weather-popup li) {
+    margin-bottom: 0.5rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+:global(.weather-popup .weather-label) {
+    font-weight: 500;
+    color: #333;
+    flex: 0 0 45%;
+}
+
+:global(.weather-popup .weather-value) {
+    font-weight: 300;
+    text-align: right;
+    flex: 0 0 55%;
+}
+
+:global(.weather-popup .precipitation-list .weather-label) {
+    flex: 0 0 60%;
+}
+
+:global(.weather-popup .precipitation-list .weather-value) {
+    flex: 0 0 40%;
+}
+
+:global(.weather-popup strong) {
+    font-family: 'Lato', sans-serif;
+    font-weight: 700;
+    color: #2b82cb;
+    display: block;
+    margin-top: 1rem;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 0.25rem;
+}
+
+:global(.weather-popup i) {
+    font-family: 'Lato', sans-serif;
+    font-style: italic;
+    font-weight: 400;
+    color: #666;
+    font-size: 0.9rem;
 }
 </style>

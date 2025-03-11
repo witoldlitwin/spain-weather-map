@@ -1,0 +1,43 @@
+{
+  "controls": {
+    "month": "Miesiąc:",
+    "year": "Rok:"
+  },
+  "months": {
+    "january": "Styczeń",
+    "february": "Luty",
+    "march": "Marzec",
+    "april": "Kwiecień",
+    "may": "Maj",
+    "june": "Czerwiec",
+    "july": "Lipiec",
+    "august": "Sierpień",
+    "september": "Wrzesień",
+    "october": "Październik",
+    "november": "Listopad",
+    "december": "Grudzień"
+  },
+  "weather": {
+    "loading": "Ładowanie gmin...",
+    "loadingData": "Ładowanie danych pogodowych...",
+    "error": "Błąd podczas pobierania gmin",
+    "errorData": "Błąd podczas pobierania danych pogodowych",
+    "temperatureData": "Pogoda dla {month}:",
+    "maxTemperature": "Temp. maks.:",
+    "minTemperature": "Temp. min.:",
+    "nightTemperatures": "Temp. nocna:",
+    "apparentTemperatures": "Temp. odczuw.:",
+    "min": "Min",
+    "max": "Max",
+    "daysOver": "Dni > {temp}°C:",
+    "precipitationData": "Opady i zachmurzenie:",
+    "rainyDays": "Dni deszczowe:",
+    "cloudyDays": "Dni pochmurne:",
+    "month": "Miesiąc: {month} {year}"
+  },
+  "language": {
+    "select": "Język:",
+    "en": "Angielski",
+    "pl": "Polski"
+  }
+} 
