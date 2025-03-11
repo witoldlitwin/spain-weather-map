@@ -29,6 +29,10 @@ watch(selectedLanguage, (newLanguage) => {
   gap: 0.5rem;
 }
 
+label {
+    font-weight: 500;
+}
+
 select {
   padding: 0.5rem;
   border: 1px solid #ccc;

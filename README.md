@@ -10,6 +10,7 @@ An interactive map application that displays temperature data for municipalities
 
 ## Technologies Used
 
+- Cursor as AI code generator
 - Vue.js 3 with TypeScript
 - Leaflet for map visualization
 - Axios for API requests

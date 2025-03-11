@@ -5,9 +5,6 @@ import LanguageSwitcher from './components/LanguageSwitcher.vue'
 
 <template>
   <div class="app-container">
-    <div class="language-container">
-      <LanguageSwitcher />
-    </div>
     <WeatherMap />
   </div>
 </template>
@@ -22,16 +19,5 @@ body {
   position: relative;
   width: 100%;
   height: 100vh;
-}
-
-.language-container {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
-  z-index: 1001;
-  background: white;
-  padding: 0.5rem;
-  border-radius: 4px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 </style>

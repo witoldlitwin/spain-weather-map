@@ -4,6 +4,7 @@ import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import axios from "axios";
 import { useI18n } from "vue-i18n";
+import LanguageSwitcher from './LanguageSwitcher.vue';
 
 // Cookie utility functions
 function setCookie(name: string, value: string, days: number = 365): void {
@@ -167,7 +168,7 @@ function getWeatherEmojis(
   totalDays: number
 ): { 
   maxTempEmoji: string, 
-  minTempEmoji: string,
+  minTempEmoji: string, 
   nightEmoji: string, 
   rainEmoji: string, 
   cloudEmoji: string 
@@ -527,6 +528,8 @@ onMounted(() => {
                     </option>
                 </select>
             </div>
+            <div class="controls-spacer"></div>
+            <LanguageSwitcher />
         </div>
 
         <div id="map"></div>
@@ -553,6 +556,7 @@ onMounted(() => {
     border-bottom: 1px solid #eee;
     z-index: 1000;
     font-family: 'Lato', sans-serif;
+    align-items: center;
 }
 
 .select-container {
@@ -562,7 +566,7 @@ onMounted(() => {
 }
 
 .select-container label {
-    font-weight: 600;
+    font-weight: 500;
 }
 
 select {
@@ -671,5 +675,9 @@ select {
     font-weight: 400;
     color: #666;
     font-size: 0.9rem;
+}
+
+.controls-spacer {
+    flex: 1;
 }
 </style>
