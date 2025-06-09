@@ -10,8 +10,7 @@ import {
     COUNTRY_CONFIGS,
     COMBINED_MAP_CENTER,
     COMBINED_MAP_ZOOM,
-    getTimezoneForMunicipality,
-    getAllFallbackCities
+    getTimezoneForMunicipality
 } from '../config/countries';
 
 // Cookie utility functions
