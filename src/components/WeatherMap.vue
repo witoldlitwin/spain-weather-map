@@ -5,6 +5,14 @@ import L from "leaflet";
 import axios from "axios";
 import { useI18n } from "vue-i18n";
 import LanguageSwitcher from './LanguageSwitcher.vue';
+import {
+    Municipality,
+    COUNTRY_CONFIGS,
+    COMBINED_MAP_CENTER,
+    COMBINED_MAP_ZOOM,
+    getTimezoneForMunicipality,
+    getAllFallbackCities
+} from '../config/countries';
 
 // Cookie utility functions
 function setCookie(name: string, value: string, days: number = 365): void {
@@ -25,11 +33,63 @@ function getCookie(name: string): string | null {
     return null;
 }
 
-interface Municipality {
-    id: string;
-    name: string;
-    coordinates: [number, number];
+// Data processing helper functions
+function processApiRecord(record: any, countryKey: string): Municipality {
+    const config = COUNTRY_CONFIGS[countryKey];
+    let coordinates: [number, number] = [0, 0];
+
+    if (record.fields && record.fields[config.fieldMappings.coordinates]) {
+        const coordData = record.fields[config.fieldMappings.coordinates];
+        if (Array.isArray(coordData)) {
+            coordinates = [coordData[0], coordData[1]] as [number, number];
+        } else if (typeof coordData === "object") {
+            coordinates = [coordData.lat || 0, coordData.lon || 0] as [number, number];
+        }
+    }
+
+    return {
+        id: record.recordid,
+        name: record.fields[config.fieldMappings.municipalityName] || "Unknown",
+        coordinates,
+        province: record.fields[config.fieldMappings.provinceName] || "Unknown",
+        country: countryKey as 'spain' | 'portugal',
+        countryCode: config.countryCode
+    };
 }
+
+async function fetchMunicipalitiesForCountry(countryKey: string, bounds?: L.LatLngBounds): Promise<Municipality[]> {
+    const config = COUNTRY_CONFIGS[countryKey];
+
+    try {
+        let params: any = {
+            dataset: config.dataset,
+            rows: 100,
+        };
+
+        // Add geographic filtering if bounds are provided
+        if (bounds) {
+            const polygonCoords = `(${bounds.getNorthWest().lat}, ${bounds.getNorthWest().lng}), (${bounds.getNorthEast().lat}, ${bounds.getNorthEast().lng}), (${bounds.getSouthEast().lat}, ${bounds.getSouthEast().lng}), (${bounds.getSouthWest().lat}, ${bounds.getSouthWest().lng})`;
+            params["geofilter.polygon"] = polygonCoords;
+        } else {
+            // Fallback to country code filter
+            params.q = `country_code:${config.countryCode}`;
+        }
+
+        const response = await axios.get(
+            "https://public.opendatasoft.com/api/records/1.0/search/",
+            { params }
+        );
+
+        return response.data.records.map((record: any) => processApiRecord(record, countryKey));
+    } catch (error) {
+        console.error(`Error fetching municipalities for ${countryKey}:`, error);
+
+        // Return fallback cities for this country
+        return config.fallbackCities;
+    }
+}
+
+
 
 const map = ref<L.Map | null>(null);
 const currentDate = new Date();
@@ -79,109 +139,52 @@ const isSearching = ref(false);
 const allMunicipalities = ref<Municipality[]>([]);
 const searchTimeout = ref<number | null>(null);
 
-// Function to search for municipalities by name
+// Function to search for municipalities by name in both countries
 async function searchMunicipalities(query: string) {
     if (!query.trim()) return;
-    
+
     try {
         isSearching.value = true;
-        
+
         console.log(`Searching for municipalities with query: ${query}`);
-        
-        // Try a more flexible search approach
-        const response = await axios.get(
-            "https://public.opendatasoft.com/api/records/1.0/search/",
-            {
-                params: {
-                    dataset: "georef-spain-municipio",
-                    rows: 10, // Limit to 10 results
-                    q: query, // Use a simpler query without field restrictions
-                    refine: {
-                        country_code: "ESP"
-                    }
-                }
-            }
-        );
-        
-        console.log(`Found ${response.data.records.length} municipalities matching "${query}"`);
-        
-        // Process the municipalities
-        const searchResults = response.data.records.map((record: any) => {
-            let coordinates: [number, number] = [0, 0];
-            if (record.fields && record.fields.geo_point_2d) {
-                if (Array.isArray(record.fields.geo_point_2d)) {
-                    coordinates = [
-                        record.fields.geo_point_2d[0],
-                        record.fields.geo_point_2d[1],
-                    ] as [number, number];
-                } else if (typeof record.fields.geo_point_2d === "object") {
-                    coordinates = [
-                        record.fields.geo_point_2d.lat || 0,
-                        record.fields.geo_point_2d.lon || 0,
-                    ] as [number, number];
-                }
-            }
-            return {
-                id: record.recordid,
-                name: record.fields.mun_name || "Unknown",
-                coordinates,
-            };
-        });
-        
-        // If no results found with the first approach, try a fallback approach
-        if (searchResults.length === 0) {
-            console.log("No results with first approach, trying fallback...");
-            
-            const fallbackResponse = await axios.get(
-                "https://public.opendatasoft.com/api/records/1.0/search/",
-                {
-                    params: {
-                        dataset: "georef-spain-municipio",
-                        rows: 100, // Get more results for client-side filtering
-                        q: `country_code:ESP`,
-                    }
-                }
-            );
-            
-            // Client-side filtering for more flexible matching
-            const fallbackResults = fallbackResponse.data.records
-                .map((record: any) => {
-                    let coordinates: [number, number] = [0, 0];
-                    if (record.fields && record.fields.geo_point_2d) {
-                        if (Array.isArray(record.fields.geo_point_2d)) {
-                            coordinates = [
-                                record.fields.geo_point_2d[0],
-                                record.fields.geo_point_2d[1],
-                            ] as [number, number];
-                        } else if (typeof record.fields.geo_point_2d === "object") {
-                            coordinates = [
-                                record.fields.geo_point_2d.lat || 0,
-                                record.fields.geo_point_2d.lon || 0,
-                            ] as [number, number];
+
+        // Search both countries in parallel
+        const searchPromises = Object.keys(COUNTRY_CONFIGS).map(async (countryKey) => {
+            const config = COUNTRY_CONFIGS[countryKey];
+
+            try {
+                // Try direct search first
+                const response = await axios.get(
+                    "https://public.opendatasoft.com/api/records/1.0/search/",
+                    {
+                        params: {
+                            dataset: config.dataset,
+                            rows: 5, // Limit per country
+                            q: query,
+                            refine: {
+                                country_code: config.countryCode
+                            }
                         }
                     }
-                    return {
-                        id: record.recordid,
-                        name: record.fields.mun_name || "Unknown",
-                        coordinates,
-                    };
-                })
-                .filter((municipality: Municipality) => 
+                );
+
+                return response.data.records.map((record: any) => processApiRecord(record, countryKey));
+            } catch (error) {
+                console.error(`Error searching ${countryKey}:`, error);
+
+                // Fallback to client-side filtering of fallback cities
+                return config.fallbackCities.filter((municipality: Municipality) =>
                     municipality.name.toLowerCase().includes(query.toLowerCase())
-                )
-                .slice(0, 10); // Limit to 10 results
-                
-            console.log(`Found ${fallbackResults.length} municipalities with fallback approach`);
-            
-            if (fallbackResults.length > 0) {
-                allMunicipalities.value = fallbackResults;
-                return;
+                ).slice(0, 3);
             }
-        }
-        
-        // Update our search results if the first approach worked
-        allMunicipalities.value = searchResults;
-        
+        });
+
+        const results = await Promise.all(searchPromises);
+        const combinedResults = results.flat().slice(0, 10); // Limit total results
+
+        console.log(`Found ${combinedResults.length} municipalities across both countries`);
+        allMunicipalities.value = combinedResults;
+
     } catch (e) {
         console.error("Error searching municipalities:", e);
         error.value = "Error searching municipalities";
@@ -301,8 +304,8 @@ watch([selectedMonth, selectedYear], ([month, year]) => {
         if (popupLatLng) {
             const activeMunicipality = municipalities.value.find(
                 (m) =>
-                    m.coordinates[0] === popupLatLng.lat &&
-                    m.coordinates[1] === popupLatLng.lng
+                    Math.abs(m.coordinates[0] - popupLatLng.lat) < 0.001 &&
+                    Math.abs(m.coordinates[1] - popupLatLng.lng) < 0.001
             );
             if (activeMunicipality) {
                 showMunicipalityWeather(activeMunicipality);
@@ -410,75 +413,30 @@ async function fetchMunicipalities() {
         error.value = "";
 
         const bounds = map.value.getBounds();
-        const polygonCoords = `(${bounds.getNorthWest().lat}, ${
-            bounds.getNorthWest().lng
-        }), (${bounds.getNorthEast().lat}, ${bounds.getNorthEast().lng}), (${
-            bounds.getSouthEast().lat
-        }, ${bounds.getSouthEast().lng}), (${bounds.getSouthWest().lat}, ${
-            bounds.getSouthWest().lng
-        })`;
 
-        let response;
-        try {
-            response = await axios.get(
-                "https://public.opendatasoft.com/api/records/1.0/search/",
-                {
-                    params: {
-                        dataset: "georef-spain-municipio",
-                        rows: 100,
-                        "geofilter.polygon": polygonCoords,
-                    },
-                }
-            );
-        } catch (polygonError) {
-            console.error(
-                "Polygon filter failed, trying bounding box:",
-                polygonError
-            );
-            response = await axios.get(
-                "https://public.opendatasoft.com/api/records/1.0/search/",
-                {
-                    params: {
-                        dataset: "georef-spain-municipio",
-                        rows: 100,
-                        q: `country_code:ESP`,
-                    },
-                }
-            );
-        }
+        // Fetch municipalities from both countries in parallel
+        const fetchPromises = Object.keys(COUNTRY_CONFIGS).map(countryKey =>
+            fetchMunicipalitiesForCountry(countryKey, bounds)
+        );
+
+        const results = await Promise.all(fetchPromises);
+        const combinedMunicipalities = results.flat();
 
         if (markerLayer.value) {
             markerLayer.value.clearLayers();
         }
 
-        municipalities.value = response.data.records.map((record: any) => {
-            let coordinates: [number, number] = [0, 0];
-            if (record.fields && record.fields.geo_point_2d) {
-                if (Array.isArray(record.fields.geo_point_2d)) {
-                    coordinates = [
-                        record.fields.geo_point_2d[0],
-                        record.fields.geo_point_2d[1],
-                    ] as [number, number];
-                } else if (typeof record.fields.geo_point_2d === "object") {
-                    coordinates = [
-                        record.fields.geo_point_2d.lat || 0,
-                        record.fields.geo_point_2d.lon || 0,
-                    ] as [number, number];
-                }
-            }
-            return {
-                id: record.recordid,
-                name: record.fields.mun_name || "Unknown",
-                coordinates,
-            };
-        });
+        municipalities.value = combinedMunicipalities;
 
         municipalities.value.forEach((municipality) => {
+            // Create different marker colors for different countries
             const marker = L.marker(municipality.coordinates)
-                .bindTooltip(municipality.name)
+                .bindTooltip(`${municipality.name} (${municipality.country === 'spain' ? '🇪🇸' : '🇵🇹'})`)
                 .on("click", () => showMunicipalityWeather(municipality));
             markerLayer.value?.addLayer(marker);
         });
+
+        console.log(`Loaded ${municipalities.value.length} municipalities from both countries`);
     } catch (e) {
         error.value = "Error fetching municipalities";
         console.error("Error fetching municipalities:", e);
@@ -488,10 +446,13 @@ async function fetchMunicipalities() {
 }
 
 async function fetchWeatherData(
-    coordinates: [number, number]
+    coordinates: [number, number],
+    municipality: Municipality
 ): Promise<string> {
     try {
         const [lat, lon] = coordinates;
+        const timezone = getTimezoneForMunicipality(municipality);
+
         const response = await axios.get(
             "https://archive-api.open-meteo.com/v1/archive",
             {
@@ -506,7 +467,7 @@ async function fetchWeatherData(
                     ).padStart(2, "0")}-28`,
                     daily: "temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,precipitation_sum,cloud_cover_mean",
                     hourly: "temperature_2m",
-                    timezone: "Europe/Madrid",
+                    timezone: timezone,
                 },
             }
         );
@@ -608,6 +569,9 @@ async function showMunicipalityWeather(municipality: Municipality) {
         activePopup.value = null;
     }
 
+    const countryFlag = municipality.country === 'spain' ? '🇪🇸' : '🇵🇹';
+    const countryName = COUNTRY_CONFIGS[municipality.country].name;
+
     // Create and open a new popup
     activePopup.value = L.popup({
         className: 'weather-popup', // Add custom class for styling
@@ -615,18 +579,20 @@ async function showMunicipalityWeather(municipality: Municipality) {
     }).setLatLng(municipality.coordinates)
         .setContent(`
       <div class="popup-content">
-        <h3>${municipality.name}</h3>
+        <h3>${municipality.name} ${countryFlag}</h3>
+        <p><small>${municipality.province}, ${countryName}</small></p>
         <p>${t("weather.loadingData")}</p>
       </div>
     `) as L.Popup;
     activePopup.value.openOn(map.value as L.Map);
 
     // Fetch and update weather data
-    const weatherData = await fetchWeatherData(municipality.coordinates);
+    const weatherData = await fetchWeatherData(municipality.coordinates, municipality);
     if (activePopup.value) {
         activePopup.value.setContent(`
       <div class="popup-content">
-        <h3>${municipality.name}</h3>
+        <h3>${municipality.name} ${countryFlag}</h3>
+        <p><small>${municipality.province}, ${countryName}</small></p>
         ${weatherData}
         <p><i>${t("weather.month", { month: months.value[selectedMonth.value - 1], year: selectedYear.value })}</i></p>
       </div>
@@ -637,8 +603,8 @@ async function showMunicipalityWeather(municipality: Municipality) {
 onMounted(() => {
     // Wait a moment for the DOM to be fully rendered
     setTimeout(() => {
-        // Initialize map
-        map.value = L.map("map").setView([40.4, -3.7], 6);
+        // Initialize map with combined view for Spain and Portugal
+        map.value = L.map("map").setView(COMBINED_MAP_CENTER, COMBINED_MAP_ZOOM);
 
         // Create tile layer and add it to the map
         const mapTileLayer = L.tileLayer(
@@ -713,13 +679,14 @@ onMounted(() => {
                         <div v-if="isSearching" class="search-message">{{ t('search.searching') }}</div>
                         <div v-else-if="filteredMunicipalities.length === 0" class="search-message">{{ t('search.noResults') }}</div>
                         <ul v-else>
-                            <li 
-                                v-for="municipality in filteredMunicipalities" 
+                            <li
+                                v-for="municipality in filteredMunicipalities"
                                 :key="municipality.id"
                                 @click="selectMunicipality(municipality)"
                                 class="search-result-item"
                             >
-                                {{ municipality.name }}
+                                {{ municipality.name }} {{ municipality.country === 'spain' ? '🇪🇸' : '🇵🇹' }}
+                                <small class="municipality-province">{{ municipality.province }}</small>
                             </li>
                         </ul>
                     </div>
@@ -873,10 +840,19 @@ select {
     padding: 0.5rem 1rem;
     cursor: pointer;
     transition: background-color 0.2s;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
 }
 
 .search-result-item:hover {
     background-color: #f0f0f0;
+}
+
+.municipality-province {
+    color: #666;
+    font-size: 0.85rem;
+    margin-left: 0.5rem;
 }
 
 .search-message {

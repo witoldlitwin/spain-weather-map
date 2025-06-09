@@ -1,12 +1,14 @@
-# Spain Weather Map
+# Spain & Portugal Weather Map
 
-An interactive map application that displays temperature data for municipalities in Spain.
+An interactive map application that displays historical weather data for municipalities in both Spain and Portugal.
 
 ## Features
 
-- Interactive map of Spain showing municipalities
-- Historical weather data for each municipality
+- Interactive map showing municipalities from both Spain and Portugal
+- Historical weather data for each municipality with timezone-aware calculations
+- Search functionality across both countries
 - Filter by month and year
+- Country identification with flags and province information
 
 ## Technologies Used
 
@@ -14,7 +16,7 @@ An interactive map application that displays temperature data for municipalities
 - Vue.js 3 with TypeScript
 - Leaflet for map visualization
 - Axios for API requests
-- OpenDataSoft API for municipality data
+- OpenDataSoft API for Spanish and Portuguese municipality data
 - Open-Meteo API for historical weather data
 
 ## Getting Started
