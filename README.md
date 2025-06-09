@@ -2,6 +2,12 @@
 
 An interactive map application that displays historical weather data for municipalities in both Spain and Portugal.
 
+App preview: https://spain-weather-map.pages.dev
+
+![image](https://github.com/user-attachments/assets/fadbbadd-e305-4f01-9b93-d67465262566)
+
+
+
 ## Features
 
 - Interactive map showing municipalities from both Spain and Portugal
@@ -30,7 +36,7 @@ An interactive map application that displays historical weather data for municip
 
 1. Clone the repository
 ```bash
-git clone <repository-url>
+git clone https://github.com/witoldlitwin/spain-weather-map
 cd spain-weather-map
 ```
 
